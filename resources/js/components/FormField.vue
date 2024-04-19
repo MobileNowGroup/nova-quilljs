@@ -22,20 +22,41 @@ import {FormField, HandlesValidationErrors} from "laravel-nova";
 import {quillEditor, Quill} from 'vue3-quill'
 import BlotFormatter from "quill-blot-formatter";
 import {ImageExtend, QuillWatch} from "quill-image-extend-module";
-import {VideoBlot} from "../../quilljs/VideoBlot";
 import Tooltip from "quill/ui/tooltip";
 import {CustomImageSpec} from "../../quilljs/CustomImageSpec";
 import "quill/dist/quill.core.css";
 import "quill/dist/quill.snow.css";
 import "quill/dist/quill.bubble.css";
+import {VideoHandler } from "quill-upload";
 
 Quill.register({
     "modules/ImageExtend": ImageExtend,
     "modules/blotFormatter": BlotFormatter,
     "ui/tooltip": Tooltip,
-    "formats/video": VideoBlot,
+    "modules/videoHandler": VideoHandler,
 });
-const Delta = Quill.import('delta')
+const Delta = Quill.import('delta');
+
+const _onUpload = function (fd, resolve) {
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", "/nova-vendor/quill-video-upload");
+
+  xhr.setRequestHeader(
+      "X-CSRF-TOKEN",
+      document.head.querySelector('meta[name="csrf-token"]').content
+  );
+
+  xhr.onload = () => {
+    if (xhr.status === 200) {
+      const response = JSON.parse(xhr.responseText);
+
+      resolve(response.url); // Must resolve as a link to the image
+    }
+  };
+
+  xhr.send(fd);
+};
+
 export default {
     mixins: [FormField, HandlesValidationErrors],
     components: {
@@ -82,16 +103,20 @@ export default {
 
                         },
                     },
+                    videoHandler: {
+                      upload: file => {
+                        // return a Promise that resolves in a link to the uploaded image
+                        return new Promise((resolve, reject) => {
+                          const fd = new FormData();
+                          fd.append("file", file);
+                          fd.append("fileName", file.name);
+
+                          return _onUpload(fd, resolve);
+                        });
+                      }
+                    },
                     toolbar: {
-                        container: this.field.options,
-                        handlers: {
-                            image() {
-                                QuillWatch.emit(this.quill.id);
-                            },
-                            video(value) {
-                                this.quill.theme.tooltip.edit("video");
-                            },
-                        },
+                        container: this.field.options
                     },
                 },
             },
